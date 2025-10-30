@@ -8,7 +8,6 @@ const router = express.Router();
 // ----------------------
 // 🗂️ Multer Configuration
 // ----------------------
-// Store file temporarily in 'uploads' (we’ll delete after reading)
 const upload = multer({ dest: "uploads/" });
 
 // -----------------------------
@@ -29,6 +28,25 @@ async function generateSequentialId(prefix, field) {
   const lastId = numbers.length > 0 ? Math.max(...numbers) : 0;
   return `${prefix}${(lastId + 1).toString().padStart(3, "0")}`;
 }
+
+// ----------------------
+// 🖼️ Serve Image by ID (✅ must be placed BEFORE /:id routes)
+// ----------------------
+router.get("/image/:id", async (req, res) => {
+  try {
+    const bill = await GymBill.findById(req.params.id);
+    if (!bill || !bill.profilePicture?.data) {
+      return res.status(404).send("Image not found");
+    }
+
+    res.set("Content-Type", bill.profilePicture.contentType);
+    res.set("Cache-Control", "public, max-age=31536000"); // optional caching
+    res.send(bill.profilePicture.data);
+  } catch (error) {
+    console.error("❌ Image fetch error:", error);
+    res.status(500).send("Error fetching image");
+  }
+});
 
 // ---------------------
 // 🧾 Create New Gym Bill
@@ -73,7 +91,9 @@ router.post("/", upload.single("profilePicture"), async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error creating gym bill:", error);
-    res.status(500).json({ message: "Error creating gym bill", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error creating gym bill", error: error.message });
   }
 });
 
@@ -85,7 +105,9 @@ router.get("/", async (req, res) => {
     const bills = await GymBill.find().sort({ _id: -1 });
     res.status(200).json(bills);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching bills", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error fetching bills", error: error.message });
   }
 });
 
@@ -100,7 +122,11 @@ router.get("/last-member-id", async (req, res) => {
 
     const lastNumber =
       allBills.length > 0
-        ? Math.max(...allBills.map((b) => parseInt(b.memberId.replace("H40", ""), 10)))
+        ? Math.max(
+            ...allBills.map((b) =>
+              parseInt(b.memberId.replace("H40", ""), 10)
+            )
+          )
         : 0;
 
     const nextNumber = lastNumber + 1;
@@ -156,13 +182,20 @@ router.put("/:id", upload.single("profilePicture"), async (req, res) => {
       fs.unlinkSync(req.file.path);
     }
 
-    if (!updatedData.status || !["Active", "Inactive"].includes(updatedData.status)) {
+    if (
+      !updatedData.status ||
+      !["Active", "Inactive"].includes(updatedData.status)
+    ) {
       updatedData.status = "Active";
     }
 
-    const updated = await GymBill.findByIdAndUpdate(req.params.id, updatedData, {
-      new: true,
-    });
+    const updated = await GymBill.findByIdAndUpdate(
+      req.params.id,
+      updatedData,
+      {
+        new: true,
+      }
+    );
 
     res.json(updated);
   } catch (err) {
@@ -184,23 +217,5 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// ----------------------
-// 🖼️ Serve Image by ID
-// ----------------------
-router.get("/image/:id", async (req, res) => {
-  try {
-    const bill = await GymBill.findById(req.params.id);
-    if (!bill || !bill.profilePicture?.data) {
-      return res.status(404).send("Image not found");
-    }
-
-    res.set("Content-Type", bill.profilePicture.contentType);
-    res.send(bill.profilePicture.data);
-  } catch (error) {
-    console.error("❌ Image fetch error:", error);
-    res.status(500).send("Error fetching image");
-  }
-});
-
-// ✅ Export router as default
+// ✅ Export router
 export default router;
