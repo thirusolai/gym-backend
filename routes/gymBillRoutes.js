@@ -35,18 +35,24 @@ async function generateSequentialId(prefix, field) {
 router.get("/image/:id", async (req, res) => {
   try {
     const bill = await GymBill.findById(req.params.id);
+
     if (!bill || !bill.profilePicture?.data) {
-      return res.status(404).send("Image not found");
+      return res.status(404).json({ message: "Image not found" });
     }
 
-    res.set("Content-Type", bill.profilePicture.contentType);
-    res.set("Cache-Control", "public, max-age=31536000"); // optional caching
-    res.send(bill.profilePicture.data);
+    const imgBuffer = Buffer.from(bill.profilePicture.data);
+    res.writeHead(200, {
+      "Content-Type": bill.profilePicture.contentType,
+      "Content-Length": imgBuffer.length,
+      "Cache-Control": "public, max-age=31536000",
+    });
+    res.end(imgBuffer);
   } catch (error) {
     console.error("❌ Image fetch error:", error);
-    res.status(500).send("Error fetching image");
+    res.status(500).json({ message: "Error fetching image", error: error.message });
   }
 });
+
 
 // ---------------------
 // 🧾 Create New Gym Bill
