@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const gymBillSchema = new mongoose.Schema(
   {
@@ -16,7 +16,7 @@ const gymBillSchema = new mongoose.Schema(
     workoutHours: String,
     areaAddress: String,
     remarks: String,
-   profilePicture: { type: String }, // File path or URL
+    profilePicture: { type: String }, // File path or URL
     package: String,
     joiningDate: String,
     endDate: String,
@@ -29,7 +29,7 @@ const gymBillSchema = new mongoose.Schema(
     amountPayable: Number,
     amountPaid: Number,
     balance: Number,
-    amount: Number, // optional field if needed
+    amount: Number, // optional
     followupDate: String,
     status: {
       type: String,
@@ -40,13 +40,12 @@ const gymBillSchema = new mongoose.Schema(
     appointTrainer: String,
     clientRep: String,
   },
-  { timestamps: true } // ✅ Automatically adds createdAt and updatedAt
+  { timestamps: true } // ✅ Adds createdAt and updatedAt
 );
 
-// Auto-calculation middleware before saving
+// Auto-calculation before saving
 gymBillSchema.pre("save", function (next) {
   const discountAmt = this.price && this.discount ? (this.price * this.discount) / 100 : 0;
-
   const taxableAmount = this.price - discountAmt + (this.admissionCharges || 0);
   const taxAmt = this.tax ? (taxableAmount * this.tax) / 100 : 0;
 
@@ -57,6 +56,6 @@ gymBillSchema.pre("save", function (next) {
   next();
 });
 
-module.exports = mongoose.model("GymBill", gymBillSchema);
+const GymBill = mongoose.model("GymBill", gymBillSchema);
 
-
+export default GymBill;
