@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const gymBillSchema = new mongoose.Schema(
   {
-    memberId: { type: String, unique: true }, // Auto-generated e.g. MEM001
+    memberId: { type: String }, // manually entered or left blank
     client: String,
     contactNumber: String,
     alternateContact: String,
@@ -16,10 +16,12 @@ const gymBillSchema = new mongoose.Schema(
     workoutHours: String,
     areaAddress: String,
     remarks: String,
+
     profilePicture: {
-    data: Buffer,
-    contentType: String,
-  }, // File path or URL
+      data: Buffer,
+      contentType: String,
+    },
+
     package: String,
     joiningDate: String,
     endDate: String,
@@ -34,22 +36,27 @@ const gymBillSchema = new mongoose.Schema(
     balance: Number,
     amount: Number, // optional
     followupDate: String,
+
     status: {
       type: String,
       enum: ["Active", "Inactive"],
       default: "Active",
     },
+
     paymentMethodDetail: String,
     appointTrainer: String,
     clientRep: String,
   },
-  { timestamps: true } // ✅ Adds createdAt and updatedAt
+  { timestamps: true } // Adds createdAt and updatedAt
 );
 
 // Auto-calculation before saving
 gymBillSchema.pre("save", function (next) {
-  const discountAmt = this.price && this.discount ? (this.price * this.discount) / 100 : 0;
+  const discountAmt =
+    this.price && this.discount ? (this.price * this.discount) / 100 : 0;
+
   const taxableAmount = this.price - discountAmt + (this.admissionCharges || 0);
+
   const taxAmt = this.tax ? (taxableAmount * this.tax) / 100 : 0;
 
   this.discountAmount = discountAmt;

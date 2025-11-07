@@ -10,23 +10,6 @@ const router = express.Router();
 // ----------------------
 const upload = multer({ dest: "uploads/" });
 
-// -----------------------------
-// 🔢 Sequential Numeric Member ID Generator
-// -----------------------------
-async function generateSequentialMemberId() {
-  const lastBill = await GymBill.findOne().sort({ _id: -1 }).lean();
-  let nextMemberId = 1;
-
-  if (lastBill && lastBill.memberId) {
-    const lastNumber = parseInt(lastBill.memberId, 10);
-    if (!isNaN(lastNumber)) {
-      nextMemberId = lastNumber + 1;
-    }
-  }
-
-  return nextMemberId.toString(); // Return as string for consistency
-}
-
 // ----------------------
 // 🖼️ Serve Image by ID
 // ----------------------
@@ -59,8 +42,18 @@ router.post("/", upload.single("profilePicture"), async (req, res) => {
     if (!req.body || Object.keys(req.body).length === 0)
       return res.status(400).json({ message: "No data provided" });
 
-    // ✅ Generate sequential numeric ID
-    const memberId = await generateSequentialMemberId();
+    // ✅ Require manual memberId input
+    if (!req.body.memberId || req.body.memberId.trim() === "") {
+      return res.status(400).json({ message: "Member ID is required" });
+    }
+
+    const memberId = req.body.memberId.trim();
+
+    // ✅ Check for duplicate memberId
+    const existingBill = await GymBill.findOne({ memberId });
+    if (existingBill) {
+      return res.status(400).json({ message: `Member ID "${memberId}" already exists.` });
+    }
 
     // ✅ Ensure valid status
     let status = req.body.status?.trim();
@@ -68,7 +61,7 @@ router.post("/", upload.single("profilePicture"), async (req, res) => {
       status = "Active";
     }
 
-    // ✅ Handle profile picture (convert to Buffer)
+    // ✅ Handle profile picture
     let profilePicture = undefined;
     if (req.file) {
       const imageData = fs.readFileSync(req.file.path);
@@ -111,53 +104,65 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ----------------------------
-// 📋 Get Last Member ID (for UI)
-// ----------------------------
-router.get("/last-member-id", async (req, res) => {
-  try {
-    const lastBill = await GymBill.findOne().sort({ _id: -1 }).lean();
-
-    let nextMemberId = 1;
-    if (lastBill && lastBill.memberId) {
-      const lastNumber = parseInt(lastBill.memberId, 10);
-      if (!isNaN(lastNumber)) {
-        nextMemberId = lastNumber + 1;
-      }
-    }
-
-    res.json({ nextMemberId: nextMemberId.toString() });
-  } catch (err) {
-    console.error("❌ Error fetching next member ID:", err);
-    res.status(500).json({ error: "Error fetching next member ID" });
-  }
-});
-
 // ------------------
-// 🔁 Renew Membership
+// 🔁 Renew Membership (Enhanced)
 // ------------------
 router.put("/renew/:id", async (req, res) => {
   try {
-    const { joiningDate, endDate, package: pkg, amountPaid } = req.body;
+    const {
+      joiningDate,
+      endDate,
+      package: pkg,
+      price,
+      discount,
+      amountPaid,
+      balance,
+      remarks,
+      trainer,
+    } = req.body;
 
+    // ✅ Fetch existing client to retain unchanged data
+    const client = await GymBill.findById(req.params.id);
+    if (!client) {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    // ✅ Recalculate fields safely
+    const priceNum = Number(price) || 0;
+    const discountAmt = Number(discount) || 0;
+    const paidAmt = Number(amountPaid) || 0;
+    const newBalance = balance
+      ? Number(balance)
+      : priceNum - discountAmt - paidAmt;
+
+    // ✅ Update record
     const updatedClient = await GymBill.findByIdAndUpdate(
       req.params.id,
       {
         joiningDate,
         endDate,
         package: pkg,
-        amountPaid,
+        price: priceNum,
+        discount: discountAmt, // store as amount
+        amountPaid: paidAmt,
+        balance: newBalance,
+        remarks,
+        appointTrainer: trainer, // ✅ your schema field name
         status: "Active",
       },
       { new: true }
     );
 
-    res.json(updatedClient);
+    res.status(200).json({
+      message: "✅ Membership renewed successfully",
+      data: updatedClient,
+    });
   } catch (err) {
     console.error("❌ Renewal error:", err);
-    res.status(500).json({ error: "Renewal failed" });
+    res.status(500).json({ error: "Renewal failed", details: err.message });
   }
 });
+
 
 // -----------------
 // ✏️ Update Gym Bill
@@ -166,7 +171,6 @@ router.put("/:id", upload.single("profilePicture"), async (req, res) => {
   try {
     let updatedData = { ...req.body };
 
-    // ✅ Handle new profile image if provided
     if (req.file) {
       const imageData = fs.readFileSync(req.file.path);
       updatedData.profilePicture = {
@@ -176,18 +180,13 @@ router.put("/:id", upload.single("profilePicture"), async (req, res) => {
       fs.unlinkSync(req.file.path);
     }
 
-    if (
-      !updatedData.status ||
-      !["Active", "Inactive"].includes(updatedData.status)
-    ) {
+    if (!updatedData.status || !["Active", "Inactive"].includes(updatedData.status)) {
       updatedData.status = "Active";
     }
 
-    const updated = await GymBill.findByIdAndUpdate(
-      req.params.id,
-      updatedData,
-      { new: true }
-    );
+    const updated = await GymBill.findByIdAndUpdate(req.params.id, updatedData, {
+      new: true,
+    });
 
     res.json(updated);
   } catch (err) {
@@ -209,5 +208,4 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// ✅ Export router
 export default router;
